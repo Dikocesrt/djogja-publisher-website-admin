@@ -21,24 +21,70 @@
         ]
     ]);
 
-        if (isset($_POST['tambah-produk'])) {
-            $nama_produk = $_POST['nama'];
-            $harga_produk = $_POST['harga'];
-            $gambar_tmp = $_FILES['gambar']['tmp_name'];
-            $gambar_nama = $_FILES['gambar']['name'];
+    if (isset($_POST['tambah-produk'])) {
+        $nama_produk = $_POST['nama'];
+        $harga_produk = $_POST['harga'];
+        $deskripsi = $_POST['deskripsi'];
+        $gambar_tmp = $_FILES['gambar']['tmp_name'];
+        $gambar_nama = $_FILES['gambar']['name'];
 
         try {
             $response = (new UploadApi())->upload($gambar_tmp, ['folder' => 'djogja-publisher']);
 
             $gambar_url = $response['secure_url'];
 
-            $sql = "INSERT INTO produk (nama, harga, gambar, created_at) VALUES (?, ?, ?, ?)";
+            $sql = "INSERT INTO produk (nama, harga, gambar, deskripsi, created_at) VALUES (?, ?, ?, ?, ?)";
             $result = $connection->prepare($sql);
-            $result->execute([$nama_produk, $harga_produk, $gambar_url, date('Y-m-d H:i:s')]);
+            $result->execute([$nama_produk, $harga_produk, $gambar_url, $deskripsi, date('Y-m-d H:i:s')]);
         } catch (Exception $e) {
             echo '<script>alert("Gagal upload gambar karena ' . $e->getMessage() . '");</script>';
         }
     }
+
+    if (isset($_POST['edit-produk'])) {
+        $id = $_POST['id'];
+        $nama = $_POST['nama'];
+        $harga = $_POST['harga'];
+        $deskripsi = $_POST['deskripsi'];
+
+        if (!empty($_FILES['gambar']['tmp_name'])) {
+            $gambar_tmp = $_FILES['gambar']['tmp_name'];
+            $gambar_nama = $_FILES['gambar']['name'];
+
+            try {
+                $response = (new UploadApi())->upload($gambar_tmp, ['folder' => 'djogja-publisher']);
+    
+                $gambar_url = $response['secure_url'];
+    
+                $sql = "UPDATE produk SET nama = ?, harga = ?, gambar = ?, deskripsi = ? WHERE id = ?";
+                $result = $connection->prepare($sql);
+                $result->execute([$nama, $harga, $gambar_url, $deskripsi, $id]);
+            } catch (Exception $e) {
+                echo '<script>alert("Gagal upload gambar karena ' . $e->getMessage() . '");</script>';
+            }
+        }else{
+            $sql = "UPDATE produk SET nama = ?, harga = ?, deskripsi = ? WHERE id = ?";
+            $result = $connection->prepare($sql);
+            $result->execute([$nama, $harga, $deskripsi, $id]);
+        }
+    }
+
+    if (isset($_POST['delete-produk'])) {
+        $id = $_POST['id'];
+
+        $sql = "SELECT * FROM pesanan WHERE produk_id = ?";
+        $result = $connection->prepare($sql);
+        $result->execute([$id]);
+        if ($result->rowCount() > 0) {
+            echo '<script>alert("Tidak bisa menghapus produk karena terdapat transaksi dengan produk ini");</script>';
+            // header("Location: produk.php");
+        }else{
+            $sql = "DELETE FROM produk WHERE id = ?";
+            $result = $connection->prepare($sql);
+            $result->execute([$id]);
+        }
+    }
+
 ?>
 
 <!DOCTYPE html>
@@ -231,6 +277,11 @@
                                         <div data-mdb-input-init class="form-outline mb-4">
                                             <input type="number" id="harga" name="harga" class="form-control" placeholder="Masukkan Harga Produk" />
                                         </div>
+
+                                        <!-- Deskripsi input -->
+                                        <div data-mdb-input-init class="form-outline mb-4">
+                                            <input type="text" id="deskripsi" name="deskripsi" class="form-control" placeholder="Masukkan Deskripsi Produk" />
+                                        </div>
                     
                                         <!-- Gambar input -->
                                         <div data-mdb-input-init class="form-outline mb-4">
@@ -252,10 +303,12 @@
                             <thead>
                                 <tr>
                                     <th scope="col"><p class="text-primary text-center fw-bold mb-0">ID</p></th>
+                                    <th scope="col"><p class="text-primary text-center fw-bold mb-0">Gambar</p></th>
                                     <th scope="col"><p class="text-primary text-center fw-bold mb-0">Nama Produk</p></th>
                                     <th scope="col"><p class="text-primary text-center fw-bold mb-0">Harga Produk</p></th>
-                                    <th scope="col"><p class="text-primary text-center fw-bold mb-0">Gambar</p></th>
+                                    <th scope="col"><p class="text-primary text-center fw-bold mb-0">Deskripsi</p></th>
                                     <th scope="col"><p class="text-primary text-center fw-bold mb-0">Tanggal Publish</p></th>
+                                    <th scope="col"><p class="text-primary text-center fw-bold mb-0">Aksi</p></th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -266,10 +319,15 @@
                                     while ($row = $result->fetch(PDO::FETCH_ASSOC)) {
                                         echo ' <tr class="text-center">
                                                 <th scope="row" style="vertical-align: middle;"><p class="text-primary fw-bold mb-0">'. $row['id'] .'</p></th>
+                                                <td style="vertical-align: middle;"><a href="'. $row['gambar'] .'" target="_blank"><img src="'. $row['gambar'] .'" alt="gambar buku" width="100" height="130"></a></td>
                                                 <td style="vertical-align: middle;">'. $row['nama'] .'</td>
                                                 <td style="vertical-align: middle;">Rp. '. number_format($row['harga'], 2, ',', '.') .'</td>
-                                                <td style="vertical-align: middle;"><a href="'. $row['gambar'] .'" target="_blank"><img src="'. $row['gambar'] .'" alt="gambar buku" width="100" height="130"></a></td>
+                                                <td style="vertical-align: middle;">'. $row['deskripsi'] .'</td>
                                                 <td style="vertical-align: middle;">'. $row['created_at'] .'</td>
+                                                <td style="vertical-align: middle;">
+                                                    <button type="button" class="btn btn-success" data-toggle="modal" data-target="#editModal" data-id="'. $row['id'] .'" data-nama="'. $row['nama'] .'" data-harga="'. $row['harga'] .'" data-deskripsi="'. $row['deskripsi'] .'">Edit</button>
+                                                    <button type="button" class="btn btn-danger" data-toggle="modal" data-target="#deleteModal" data-id="'. $row['id'] .'">Delete</button>
+                                                </td>
                                             </tr>';
                                     }
                                 ?>
@@ -282,6 +340,69 @@
 
             </div>
             <!-- End of Main Content -->
+
+            <div class="modal fade" id="editModal" tabindex="-1" role="dialog" aria-labelledby="exampleModalLabel" aria-hidden="true">
+                <div class="modal-dialog" role="document">
+                    <div class="modal-content">
+                        <div class="modal-header">
+                            <h5 class="modal-title" id="exampleModalLabel">Edit Data Produk</h5>
+                            <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                                <span aria-hidden="true">&times;</span>
+                            </button>
+                        </div>
+                        <div class="modal-body p-4">
+                            <form method="post" name="edit-produk" enctype="multipart/form-data">
+                                <!-- Nama input -->
+                                <div data-mdb-input-init class="form-outline mb-4">
+                                    <input type="text" id="nama" name="nama" class="form-control" placeholder="Masukkan Nama Produk" />
+                                </div>
+
+                                <!-- Harga input -->
+                                <div data-mdb-input-init class="form-outline mb-4">
+                                    <input type="number" id="harga" name="harga" class="form-control" placeholder="Masukkan Harga Produk" />
+                                </div>
+
+                                <!-- Deskripsi input -->
+                                <div data-mdb-input-init class="form-outline mb-4">
+                                    <input type="text" id="deskripsi" name="deskripsi" class="form-control" placeholder="Masukkan Deskripsi" />
+                                </div>
+
+                                <!-- Gambar input -->
+                                <div data-mdb-input-init class="form-outline mb-4">
+                                    <input type="file" id="gambar" name="gambar" placeholder="Masukkan Gambar"/>
+                                </div>
+
+                                <input type="hidden" name="id" id="id">
+
+                                <!-- Submit button -->
+                                <input type="submit" name="edit-produk" data-mdb-button-init data-mdb-ripple-init class="btn btn-primary btn-block" value="Edit Data"></input>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="modal fade" id="deleteModal" tabindex="-1" role="dialog" aria-labelledby="exampleModalLabel"
+        aria-hidden="true">
+                <div class="modal-dialog" role="document">
+                    <div class="modal-content">
+                        <div class="modal-header">
+                            <h5 class="modal-title" id="exampleModalLabel">Yakin Ingin Menghapus Data?</h5>
+                            <button class="close" type="button" data-dismiss="modal" aria-label="Close">
+                                <span aria-hidden="true">×</span>
+                            </button>
+                        </div>
+                        <div class="modal-body">Data yang di hapus tidak dapat dikembalikan.</div>
+                        <form method="post" name="delete-produk">
+                            <input type="hidden" name="id" id="id">
+                            <div class="modal-footer">
+                                <button class="btn btn-secondary" type="button" data-dismiss="modal">Batal</button>
+                                <button class="btn btn-danger" name="delete-produk" type="submit">Hapus</>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
 
             <!-- Footer -->
             <footer class="sticky-footer bg-white">
@@ -320,6 +441,32 @@
     <!-- Page level custom scripts -->
     <script src="js/demo/chart-area-demo.js"></script>
     <script src="js/demo/chart-pie-demo.js"></script>
+
+    <script>
+        // Event listener untuk menampilkan modal dan mengisi field dengan data yang sesuai
+        $('#editModal').on('show.bs.modal', function (event) {
+            var button = $(event.relatedTarget); // Button yang men-trigger modal
+            var nama = button.data('nama'); // Ambil data-nama
+            var harga = button.data('harga'); // Ambil data-harga
+            var deskripsi = button.data('deskripsi');
+            var id = button.data('id'); // Ambil data-id
+
+            var modal = $(this);
+            modal.find('.modal-body input#nama').val(nama);
+            modal.find('.modal-body input#harga').val(harga);
+            modal.find('.modal-body input#deskripsi').val(deskripsi);
+            modal.find('.modal-body input#id').val(id);
+            // Tidak melakukan apa pun pada field gambar
+        });
+
+        $('#deleteModal').on('show.bs.modal', function (event) {
+            var button = $(event.relatedTarget); // Button yang men-trigger modal
+            var id = button.data('id'); // Ambil data-id
+
+            var modal = $(this);
+            modal.find('input#id').val(id);
+        });
+    </script>
 
 </body>
 
